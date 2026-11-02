@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CaspianGuard AI — сайт проекта S7 Robotics
 
-## Getting Started
+Одностраничный сайт проекта команды **S7 Robotics** для FIRST LEGO League, сезон BIOGLOW.
+CaspianGuard AI — концепт кораблика, который собирает мусор с поверхности Каспийского моря.
 
-First, run the development server:
+На сайте 3D-модель кораблика на ночной биолюминесцентной воде. Скролл ведёт камеру по секциям,
+а в секции «Разбери кораблик» модель разлетается на 12 групп деталей: их можно выбрать, повернуть и прочитать карточку.
+
+Стек: Next.js (App Router), TypeScript, Tailwind CSS, React Three Fiber, @react-three/drei, GSAP ScrollTrigger, Lenis.
+
+## Запуск
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev      # http://localhost:3000
+npm run build    # production-сборка (так же собирает Vercel)
+npm run start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Сайт собирается для Vercel без дополнительных настроек (Framework preset: Next.js).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Где что менять
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Что | Файл |
+| --- | --- |
+| Все тексты сайта, факты, этапы, Core Values, команда, контакты | `src/content/content.ts` |
+| Детали: названия, **статусы**, материал, функция, «почему так», узлы модели, разлёт, камеры | `src/content/parts.ts` |
+| Подписи статусов («Есть в прототипе», «Концепт», «Следующий этап») | `statusLabels` в `src/content/content.ts` |
+| Ключевые кадры скролла: камера, положение корабля, разбор, сбор мусора, солнечные панели, буи | `src/scene/keyframes.ts` |
+| Ватерлиния, подъём при разборе, лимиты вращения, цвета, точки подписей | `src/scene/config.ts` |
 
-## Learn More
+### Плейсхолдеры
 
-To learn more about Next.js, take a look at the following resources:
+Всё, что команда должна заполнить сама, записано в `[квадратных скобках]`.
+На сайте такие места подсвечены янтарной пунктирной рамкой. Найти их все можно поиском `[` в
+`src/content/content.ts` и `src/content/parts.ts`. Не вписывайте факты и цифры без источника.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Статусы деталей
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+В `parts.ts` у каждой группы есть поле `status`:
 
-## Deploy on Vercel
+- `"prototype"` — «Есть в прототипе»
+- `"concept"` — «Концепт» (по умолчанию)
+- `"next"` — «Следующий этап» (сейчас так отмечены солнечные панели)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Ключевые кадры
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Каждый кадр в `keyframes.ts` привязан к секции (`section` — id секции) и позиции внутри неё (`at`):
+`0` — верх секции у верха экрана, `1` — секция прокручена на свою высоту. Для закреплённой секции
+`explore` диапазон 0..1 — это весь участок закрепления. `cam`/`target` — мировые координаты в метрах,
+`camMobile` — отдельный ракурс для телефона, `shift` — сдвиг кадра в долях экрана, чтобы освободить место тексту.
+Поля, которые не указаны, сохраняют значение предыдущего кадра.
+
+## 3D-модель
+
+- `model-source/caspianguard-source.glb` — исходник (glTF 2.0, 7.29 МБ, 163 узла, ~98 000 треугольников).
+- `public/models/caspianguard.glb` — сжатая версия для сайта (1.02 МБ, EXT_meshopt_compression + KHR_mesh_quantization).
+
+Сжатие выполнено только двумя командами, без join/flatten/instance/optimize, чтобы не потерять имена узлов:
+
+```bash
+npx @gltf-transform/cli weld model-source/caspianguard-source.glb /tmp/w.glb
+npx @gltf-transform/cli meshopt /tmp/w.glb public/models/caspianguard.glb
+```
+
+Сжатая модель проверена против исходника: те же 163 имени узлов, то же число треугольников,
+отклонение габаритов отдельных узлов не больше 0.07 мм.
+
+Если вы поменяли модель, обновите `MODEL_BYTES` в `src/scene/config.ts`. При загрузке в консоль
+браузера выводятся ненайденные узлы; в dev-режиме также выводится сообщение, что найдены все 163.
+
+Как устроена сцена:
+
+- `src/scene/loadShip.ts` — загрузка с прогрессом, поиск узлов через `PropertyBinding.sanitizeNodeName`,
+  pivot-группы в центре мирового Box3 каждой группы, клоны материалов, разделение винтов по знаку Z.
+- `src/scene/components/Ship.tsx` — разбор, выбор, растворение, анимация сбора, винты, маяк.
+- `src/scene/components/CameraRig.tsx` — камера плавно догоняет цель (кадр скролла или выбранную деталь).
+- `src/scene/ScrollDirector.tsx` — Lenis, закрепление секции разбора и единая GSAP timeline.
+
+3D-модель показывает концепт, скрытые механизмы на ней условны.
+
+`public/images/caspianguard-concept.jpg` — кадр из 3D-сцены. Он показывается без WebGL и до загрузки модели.
